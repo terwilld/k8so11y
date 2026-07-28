@@ -121,5 +121,10 @@ jobs:
         kubectl get nodes
         kubectl apply -f manifests/nginx-configmap.yml
         kubectl apply -f manifests/nginx-deployment.yml
-        # You can add your "kubectl apply -f manifest.yaml" commands here
-        # You can add your "kubectl apply -f manifest.yaml" commands here
+        kubectl apply -f manifests/nginx-service.yml
+
+        echo "Waiting up to 5 minutes for IP address..."
+        kubectl wait --namespace default --for=jsonpath='{.status.loadBalancer.ingress[0].ip}' service/nginx-service --timeout=300s
+          
+        echo "Assigned Public IP:"
+        kubectl get svc nginx-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
