@@ -74,3 +74,25 @@ jobs:
       run: |
         kubectl get nodes
         # You can add your "kubectl apply -f manifest.yaml" commands here
+
+    # Step 6: Set up Helm
+    - name: Set up Helm
+      uses: azure/setup-helm@v4
+
+    # Step 7: Install the Grafana Cloud k8s-monitoring stack via Helm.
+    # Values live in manifests/grafana-k8s-monitoring-values.yaml; secrets are
+    # substituted into its ${VAR} placeholders at run time, never hardcoded here.
+    - name: Deploy Grafana Cloud k8s-monitoring
+      env:
+        GRAFANA_METRICS_USERNAME: ${{ secrets.GRAFANA_CLOUD_METRICS_USERNAME }}
+        GRAFANA_LOGS_USERNAME: ${{ secrets.GRAFANA_CLOUD_LOGS_USERNAME }}
+        GRAFANA_FLEET_USERNAME: ${{ secrets.GRAFANA_CLOUD_FLEET_USERNAME }}
+        GRAFANA_CLOUD_ACCESS_TOKEN: ${{ secrets.GRAFANA_CLOUD_ACCESS_TOKEN }}
+        GRAFANA_TRACES_USERNAME: ${{ secrets.GRAFANA_CLOUD_TRACES_USERNAME }}
+        GRAFANA_CLOUD_TRACES_TOKEN: ${{ secrets.GRAFANA_CLOUD_TRACES_TOKEN }}
+      run: |
+        helm repo add grafana https://grafana.github.io/helm-charts
+        helm repo update
+        envsubst < manifests/grafana-k8s-monitoring-values.yaml | \
+          helm upgrade --install --atomic --timeout 300s grafana-k8s-monitoring grafana/k8s-monitoring \
+            --version "^4" --namespace "monitoring" --create-namespace --values -
