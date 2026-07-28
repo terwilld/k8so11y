@@ -73,4 +73,6 @@ jobs:
     - name: Deploy & Verify GKE Cluster Connection
       run: |
         kubectl get nodes
+        kubectl apply -f manifests/nginx-configmap.yml
+        kubectl apply -f manifests/nginx-deployment.yml
         # You can add your "kubectl apply -f manifest.yaml" commands here
