@@ -1,0 +1,49 @@
+name: Delete GKE Cluster
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    # 11:00 PM America/New_York (EDT, UTC-4). GitHub Actions cron is always UTC and
+    # does not observe DST, so this runs at 10:00 PM ET during EST (winter).
+    - cron: '0 3 * * *'
+
+jobs:
+  delete-o11y-cluster:
+    name: Authenticate and Delete GKE Cluster
+    runs-on: ubuntu-latest
+
+    # Required permissions to obtain an OIDC ID token for Workload Identity Federation
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    # Step 1: Authenticate with Google Cloud using Workload Identity Federation
+    - name: Authenticate to Google Cloud
+      id: auth
+      uses: google-github-actions/auth@v2
+      with:
+        token_format: 'access_token'
+        workload_identity_provider: 'projects/771102955716/locations/global/workloadIdentityPools/github-actions/providers/github-actions-oidc'
+        service_account: 'github-actions--k8s-o11y@ukg-training-fresh.iam.gserviceaccount.com'
+
+    # Step 2: Set up gcloud CLI (needed to delete the cluster)
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+
+    # Step 3: Delete the GKE cluster if it exists
+    - name: Delete o11y-cluster
+      run: |
+        if gcloud container clusters describe o11y-cluster \
+            --project=ukg-training-fresh \
+            --zone=us-central1-a &> /dev/null; then
+          gcloud container clusters delete o11y-cluster \
+            --project=ukg-training-fresh \
+            --zone=us-central1-a \
+            --quiet
+        else
+          echo "Cluster o11y-cluster does not exist, nothing to delete."
+        fi
