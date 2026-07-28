@@ -62,24 +62,48 @@ jobs:
             --addons=HorizontalPodAutoscaling,HttpLoadBalancing,GcePersistentDiskCsiDriver,NodeLocalDNS
         fi
 
-    # Step 4: Set up the GKE credentials context
+    # Step 4: Confirm the cluster has actually reached RUNNING before we touch it,
+    # then give it a brief buffer for the API server/nodes to finish settling.
+    - name: Wait for cluster to be ready
+      run: |
+        for i in {1..30}; do
+          STATUS=$(gcloud container clusters describe o11y-cluster \
+            --project=ukg-training-fresh \
+            --zone=us-central1-a \
+            --format='value(status)')
+          echo "Cluster status: $STATUS"
+          if [ "$STATUS" == "RUNNING" ]; then
+            break
+          fi
+          sleep 10
+        done
+
+        if [ "$STATUS" != "RUNNING" ]; then
+          echo "Cluster o11y-cluster did not reach RUNNING status in time." >&2
+          exit 1
+        fi
+
+        echo "Cluster is RUNNING, waiting 30s for nodes/API server to settle..."
+        sleep 30
+
+    # Step 5: Set up the GKE credentials context
     - name: Get GKE Credentials
       uses: google-github-actions/get-gke-credentials@v2
       with:
         cluster_name: 'o11y-cluster'
         location: 'us-central1-a'
 
-    # Step 5: Run your kubectl or deployment commands
+    # Step 6: Run your kubectl or deployment commands
     - name: Deploy & Verify GKE Cluster Connection
       run: |
         kubectl get nodes
         # You can add your "kubectl apply -f manifest.yaml" commands here
 
-    # Step 6: Set up Helm
+    # Step 7: Set up Helm
     - name: Set up Helm
       uses: azure/setup-helm@v4
 
-    # Step 7: Install the Grafana Cloud k8s-monitoring stack via Helm.
+    # Step 8: Install the Grafana Cloud k8s-monitoring stack via Helm.
     # Values live in manifests/grafana-k8s-monitoring-values.yaml; secrets are
     # substituted into its ${VAR} placeholders at run time, never hardcoded here.
     - name: Deploy Grafana Cloud k8s-monitoring
