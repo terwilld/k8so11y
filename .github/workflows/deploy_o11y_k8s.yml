@@ -30,7 +30,7 @@ jobs:
       uses: google-github-actions/auth@v2
       with:
         token_format: 'access_token'
-        workload_identity_provider: 'projects/771102955716/locations/global/workloadIdentityPools/github-actions/providers/github' # Replace with your Workload Provider ID if different
+        workload_identity_provider: 'projects/771102955716/locations/global/workloadIdentityPools/github-actions/providers/github-actions-oidc' # 
         service_account: 'github-actions--k8s-o11y@ukg-training-fresh.iam.gserviceaccount.com'
 
     # Step 2: Set up gcloud CLI (needed to create the cluster)
