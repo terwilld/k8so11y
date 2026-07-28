@@ -93,12 +93,6 @@ jobs:
         cluster_name: 'o11y-cluster'
         location: 'us-central1-a'
 
-    # Step 6: Run your kubectl or deployment commands
-    - name: Deploy & Verify GKE Cluster Connection
-      run: |
-        kubectl get nodes
-        # You can add your "kubectl apply -f manifest.yaml" commands here
-
     # Step 7: Set up Helm
     - name: Set up Helm
       uses: azure/setup-helm@v4
@@ -120,3 +114,12 @@ jobs:
         envsubst < manifests/grafana-k8s-monitoring-values.yaml | \
           helm upgrade --install --atomic --timeout 300s grafana-k8s-monitoring grafana/k8s-monitoring \
             --version "^4" --namespace "monitoring" --create-namespace --values -
+
+    # Step 6: Run your kubectl or deployment commands
+    - name: Deploy & Verify GKE Cluster Connection
+      run: |
+        kubectl get nodes
+        kubectl apply -f manifests/nginx-configmap.yml
+        kubectl apply -f manifests/nginx-deployment.yml
+        # You can add your "kubectl apply -f manifest.yaml" commands here
+        # You can add your "kubectl apply -f manifest.yaml" commands here
