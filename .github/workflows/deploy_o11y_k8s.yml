@@ -1,0 +1,76 @@
+name: Deploy to GKE
+
+on:
+  push:
+    branches:
+      - main # Change this to your preferred branch
+  workflow_dispatch: {}
+  schedule:
+    # 8:00 AM America/New_York (EDT, UTC-4). GitHub Actions cron is always UTC and
+    # does not observe DST, so this runs at 7:00 AM ET during EST (winter).
+    - cron: '0 12 * * *'
+
+jobs:
+  deploy-to-gke:
+    name: Authenticate and Connect to GKE
+    runs-on: ubuntu-latest
+
+    # Required permissions to obtain an OIDC ID token for Workload Identity Federation
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    # Step 1: Authenticate with Google Cloud using Workload Identity Federation
+    - name: Authenticate to Google Cloud
+      id: auth
+      uses: google-github-actions/auth@v2
+      with:
+        token_format: 'access_token'
+        workload_identity_provider: 'projects/771102955716/locations/global/workloadIdentityPools/github-actions/providers/github' # Replace with your Workload Provider ID if different
+        service_account: 'github-actions--k8s-o11y@ukg-training-fresh.iam.gserviceaccount.com'
+
+    # Step 2: Set up gcloud CLI (needed to create the cluster)
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+
+    # Step 3: Create the GKE cluster if it doesn't already exist, matching my-cluster's spec
+    - name: Create o11y-cluster
+      run: |
+        if gcloud container clusters describe o11y-cluster \
+            --project=ukg-training-fresh \
+            --zone=us-central1-a &> /dev/null; then
+          echo "Cluster o11y-cluster already exists, skipping creation."
+        else
+          gcloud container clusters create o11y-cluster \
+            --project=ukg-training-fresh \
+            --zone=us-central1-a \
+            --release-channel=regular \
+            --num-nodes=1 \
+            --machine-type=e2-standard-2 \
+            --disk-type=pd-balanced \
+            --disk-size=20 \
+            --image-type=COS_CONTAINERD \
+            --max-pods-per-node=110 \
+            --network=default \
+            --subnetwork=default \
+            --enable-ip-alias \
+            --enable-managed-prometheus \
+            --addons=HorizontalPodAutoscaling,HttpLoadBalancing,GcePersistentDiskCsiDriver,NodeLocalDNS
+        fi
+
+    # Step 4: Set up the GKE credentials context
+    - name: Get GKE Credentials
+      uses: google-github-actions/get-gke-credentials@v2
+      with:
+        cluster_name: 'o11y-cluster'
+        location: 'us-central1-a'
+
+    # Step 5: Run your kubectl or deployment commands
+    - name: Deploy & Verify GKE Cluster Connection
+      run: |
+        kubectl get nodes
+        # You can add your "kubectl apply -f manifest.yaml" commands here
