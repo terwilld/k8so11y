@@ -116,7 +116,7 @@ jobs:
             --version "^4" --namespace "monitoring" --create-namespace --values -
 
     # Step 6: Run your kubectl or deployment commands
-    - name: Deploy & Verify GKE Cluster Connection
+    - name: Deploy Nginx & Verify GKE Cluster Connection
       run: |
         kubectl get nodes
         kubectl apply -f manifests/nginx-configmap.yml
@@ -129,3 +129,28 @@ jobs:
           
         echo "Assigned Public IP:"
         kubectl get svc nginx-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+
+    # Step 7: Install the demo and expose the frontend proxy service via LoadBalancer. This is a simple demo that generates traces, metrics, and logs to verify that the Grafana Cloud k8s-monitoring stack is working.
+    - name: Deploy OTel Demo via Helm
+      run: |
+        # Add and update the OpenTelemetry Helm repository
+        helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+        helm repo update
+
+        # Install the OpenTelemetry Demo chart
+        helm install my-otel-demo open-telemetry/opentelemetry-demo
+
+        # Patch the frontend proxy service to use a LoadBalancer
+        kubectl patch svc my-otel-demo-frontendproxy -p '{"spec": {"type": "LoadBalancer"}}'
+
+        # Wait up to 5 minutes for the cloud provider to assign the public IP
+        echo "Waiting up to 5 minutes for frontend proxy IP address..."
+        kubectl wait --namespace default \
+          --for=jsonpath='{.status.loadBalancer.ingress[0].ip}' \
+          service/my-otel-demo-frontendproxy \
+          --timeout=300s
+
+        # Print out the assigned public IP address
+        echo "Assigned Public IP for OTel Frontend Proxy:"
+        kubectl get svc my-otel-demo-frontendproxy -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+
