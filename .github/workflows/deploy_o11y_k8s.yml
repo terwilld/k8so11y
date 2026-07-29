@@ -154,3 +154,5 @@ jobs:
         echo "Assigned Public IP for OTel Frontend Proxy:"
         kubectl get svc frontend-proxy -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
 
+        kubectl patch svc frontend-proxy -p '{"spec":{"loadBalancerIP": "34.136.47.170"}}'
+
