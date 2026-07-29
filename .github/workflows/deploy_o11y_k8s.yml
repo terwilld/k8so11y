@@ -138,7 +138,7 @@ jobs:
         helm repo update
 
         # Install the OpenTelemetry Demo chart
-        helm upgrade --install my-otel-demo open-telemetry/opentelemetry-demo
+        helm upgrade --install my-otel-demo open-telemetry/opentelemetry-demo  --force-conflicts
 
         # Patch the frontend proxy service to use a LoadBalancer
         kubectl patch svc frontend-proxy -p '{"spec": {"type": "LoadBalancer"}}'
