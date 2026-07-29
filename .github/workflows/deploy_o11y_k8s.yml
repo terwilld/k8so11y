@@ -50,7 +50,7 @@ jobs:
             --zone=us-central1-a \
             --release-channel=regular \
             --num-nodes=1 \
-            --machine-type=e2-standard-2 \
+            --machine-type=e2-standard-4 \
             --disk-type=pd-balanced \
             --disk-size=20 \
             --image-type=COS_CONTAINERD \
