@@ -156,3 +156,21 @@ jobs:
 
         kubectl patch svc frontend-proxy -p '{"spec":{"loadBalancerIP": "34.136.47.170"}}'
 
+    - name: Apply OTel Collector configuration
+      run: |
+        echo "Applying OpenTelemetry Collector ConfigMap..."
+
+        kubectl apply -f manifests/otel-collector-agent.yaml
+
+        echo "Restarting OpenTelemetry Collector DaemonSet..."
+
+        kubectl rollout restart daemonset otel-collector-agent -n default
+
+        echo "Waiting for OpenTelemetry Collector pods..."
+
+        kubectl rollout status daemonset/otel-collector-agent \
+          -n default \
+          --timeout=300s
+
+        echo "OpenTelemetry Collector status:"
+        kubectl get pods -n default | grep otel-collector
