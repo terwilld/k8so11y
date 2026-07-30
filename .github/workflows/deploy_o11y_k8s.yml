@@ -131,31 +131,43 @@ jobs:
         kubectl get svc nginx-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
 
     # Step 7: Install the demo and expose the frontend proxy service via LoadBalancer. This is a simple demo that generates traces, metrics, and logs to verify that the Grafana Cloud k8s-monitoring stack is working.
-    - name: Deploy OTel Demo via Helm
-      run: |
-        # Add and update the OpenTelemetry Helm repository
-        helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
-        helm repo update
+- name: Install OpenTelemetry Demo
+  run: |
+    helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+    helm repo update
 
-        # Install the OpenTelemetry Demo chart
-        helm upgrade --install my-otel-demo open-telemetry/opentelemetry-demo  --force-conflicts
+    helm upgrade --install my-otel-demo \
+      open-telemetry/opentelemetry-demo
 
-        # Patch the frontend proxy service to use a LoadBalancer
-        kubectl patch svc frontend-proxy -p '{"spec": {"type": "LoadBalancer"}}'
+- name: Configure frontend-proxy LoadBalancer
+  run: |
+    kubectl patch svc frontend-proxy --type=merge -p '{
+      "spec": {
+        "type": "LoadBalancer",
+        "loadBalancerIP": "34.136.47.170"
+      }
+    }'
 
-        # Wait up to 5 minutes for the cloud provider to assign the public IP
-        echo "Waiting up to 5 minutes for frontend proxy IP address..."
-        kubectl wait --namespace default \
-          --for=jsonpath='{.status.loadBalancer.ingress[0].ip}' \
-          service/frontend-proxy \
-          --timeout=300s
+- name: Wait for static IP
+  shell: bash
+  run: |
+    echo "Waiting for frontend-proxy to receive the static IP..."
 
-        # Print out the assigned public IP address
-        echo "Assigned Public IP for OTel Frontend Proxy:"
-        kubectl get svc frontend-proxy -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+    for i in {1..60}; do
+      IP=$(kubectl get svc frontend-proxy \
+        -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 
-        kubectl patch svc frontend-proxy -p '{"spec":{"loadBalancerIP": "34.136.47.170"}}'
+      if [ "$IP" = "34.136.47.170" ]; then
+        echo "Frontend Proxy is available at $IP"
+        exit 0
+      fi
 
+      sleep 5
+    done
+
+    echo "Timed out waiting for the LoadBalancer."
+    kubectl get svc frontend-proxy -o wide
+    exit 1
     - name: Apply OTel Collector configuration
       run: |
         echo "Applying OpenTelemetry Collector ConfigMap..."
