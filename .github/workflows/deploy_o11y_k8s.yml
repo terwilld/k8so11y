@@ -140,21 +140,28 @@ jobs:
 
         if helm list -n "$NAMESPACE" --deployed --filter "^${RELEASE}$" | awk 'NR>1 {print $1}' | grep -qx "$RELEASE"; then
           echo "already_deployed=true" >> "$GITHUB_OUTPUT"
+          echo "already_deployed=true"          
         else
           echo "already_deployed=false" >> "$GITHUB_OUTPUT"
+          echo "already_deployed=false"
         fi
+
 
     - name: Deploy OTel Demo via Helm
       if: steps.helm_check.outputs.already_deployed != 'true'
+      env:
+        ALREADY_DEPLOYED: ${{ steps.helm_check.outputs.already_deployed }}
       run: |
+        echo "already_deployed=${ALREADY_DEPLOYED}"
+    
         helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
         helm repo update
-
+    
         helm upgrade --install my-otel-demo \
           open-telemetry/opentelemetry-demo \
           -n default \
           --create-namespace
-
+          
     - name: Expose OTel Frontend
       run: |
         kubectl patch svc frontend-proxy -p '{"spec":{"type":"LoadBalancer"}}'
