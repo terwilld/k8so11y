@@ -156,21 +156,22 @@ jobs:
 
         # Add servicegraph connector after OTLP receiver if not already present
         if 'otelcol.connector.servicegraph "default"' not in content:
-          servicegraph_block = '''
-
-  // Service Graph Connector
-  otelcol.connector.servicegraph "default" {
-    dimensions = ["http.method", "http.target"]
-
-    output {
-      metrics = argument.metrics_destinations.value
-    }
-  } // otelcol.connector.servicegraph "default"'''
+          servicegraph_block = (
+              "\n\n"
+              "  // Service Graph Connector\n"
+              "  otelcol.connector.servicegraph \"default\" {\n"
+              "    dimensions = [\"http.method\", \"http.target\"]\n"
+              "\n"
+              "    output {\n"
+              "      metrics = argument.metrics_destinations.value\n"
+              "    }\n"
+              "  } // otelcol.connector.servicegraph \"default\""
+          )
 
           # Insert after OTLP receiver
           content = re.sub(
               r'(} // otelcol\.receiver\.otlp "receiver")',
-              r'\1' + servicegraph_block,
+              lambda m: m.group(1) + servicegraph_block,
               content,
               count=1
           )
