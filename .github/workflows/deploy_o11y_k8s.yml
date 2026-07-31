@@ -137,23 +137,54 @@ jobs:
           exit 0
         fi
 
-        # Remove incorrect servicegraph routing from k8sattributes if present
-        sed -i.bak 's/, otelcol\.connector\.servicegraph\.default\.input//g' /tmp/alloy-config.river
+        # Use Python to modify the config (more reliable than sed with complex patterns)
+        python3 << 'PYTHON'
+        import re
+
+        with open('/tmp/alloy-config.river', 'r') as f:
+            content = f.read()
+
+        # Remove any incorrect servicegraph references from k8sattributes
+        content = re.sub(r',\s*otelcol\.connector\.servicegraph\.default\.input', '', content)
 
         # Add servicegraph to OTLP receiver output
-        sed -i.bak 's/traces = \[otelcol\.processor\.resourcedetection\.default\.input\]/traces = [otelcol.connector.servicegraph.default.input, otelcol.processor.resourcedetection.default.input]/' /tmp/alloy-config.river
+        content = re.sub(
+            r'(traces = \[)otelcol\.processor\.resourcedetection\.default\.input',
+            r'\1otelcol.connector.servicegraph.default.input, otelcol.processor.resourcedetection.default.input',
+            content
+        )
 
-        # Add servicegraph connector definition after OTLP receiver
-        sed -i.bak '/} \/\/ otelcol\.receiver\.otlp "receiver"/a\
-\
-  \/\/ Service Graph Connector\
-  otelcol.connector.servicegraph "default" {\
-    dimensions = ["http.method", "http.target"]\
-\
-    output {\
-      metrics = argument.metrics_destinations.value\
-    }\
-  } \/\/ otelcol.connector.servicegraph "default"' /tmp/alloy-config.river
+        # Add servicegraph connector after OTLP receiver if not already present
+        if 'otelcol.connector.servicegraph "default"' not in content:
+          servicegraph_block = '''
+
+  // Service Graph Connector
+  otelcol.connector.servicegraph "default" {
+    dimensions = ["http.method", "http.target"]
+
+    output {
+      metrics = argument.metrics_destinations.value
+    }
+  } // otelcol.connector.servicegraph "default"'''
+
+          # Insert after OTLP receiver
+          content = re.sub(
+              r'(} // otelcol\.receiver\.otlp "receiver")',
+              r'\1' + servicegraph_block,
+              content,
+              count=1
+          )
+
+        with open('/tmp/alloy-config.river', 'w') as f:
+            f.write(content)
+
+        print("✓ Config modified successfully")
+        PYTHON
+
+        if [ $? -ne 0 ]; then
+          echo "⚠ Warning: Failed to modify config, continuing deployment"
+          exit 0
+        fi
 
         # Patch ConfigMap
         CONFIG=$(cat /tmp/alloy-config.river | jq -Rs .)
