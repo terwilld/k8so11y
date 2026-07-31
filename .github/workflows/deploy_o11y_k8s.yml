@@ -115,7 +115,82 @@ jobs:
           helm upgrade --install --atomic --timeout 300s grafana-k8s-monitoring grafana/k8s-monitoring \
             --version "^4" --namespace "monitoring" --create-namespace --values -
 
-    # Step 6: Run your kubectl or deployment commands
+    # Step 6: Enable Service Graph in Alloy (idempotent)
+    - name: Enable Service Graph in Alloy Singleton
+      run: |
+        set +e  # Don't fail on errors in this step
+
+        echo "Checking if service graph is already enabled..."
+        CONFIG=$(kubectl get configmap -n monitoring grafana-k8s-monitoring-alloy-singleton -o jsonpath='{.data.config\.alloy}' 2>/dev/null)
+
+        if echo "$CONFIG" | grep -q "otelcol.connector.servicegraph"; then
+          echo "✓ Service graph already enabled, skipping configuration"
+          exit 0
+        fi
+
+        echo "Service graph not found, enabling now..."
+
+        # Save current config
+        kubectl get configmap -n monitoring grafana-k8s-monitoring-alloy-singleton -o jsonpath='{.data.config\.alloy}' > /tmp/alloy-config.river 2>/dev/null
+        if [ $? -ne 0 ]; then
+          echo "⚠ Warning: Could not retrieve Alloy config, skipping service graph enablement"
+          exit 0
+        fi
+
+        # Remove incorrect servicegraph routing from k8sattributes if present
+        sed -i.bak 's/, otelcol\.connector\.servicegraph\.default\.input//g' /tmp/alloy-config.river
+
+        # Add servicegraph to OTLP receiver output
+        sed -i.bak 's/traces = \[otelcol\.processor\.resourcedetection\.default\.input\]/traces = [otelcol.connector.servicegraph.default.input, otelcol.processor.resourcedetection.default.input]/' /tmp/alloy-config.river
+
+        # Add servicegraph connector definition after OTLP receiver
+        sed -i.bak '/} \/\/ otelcol\.receiver\.otlp "receiver"/a\
+\
+  \/\/ Service Graph Connector\
+  otelcol.connector.servicegraph "default" {\
+    dimensions = ["http.method", "http.target"]\
+\
+    output {\
+      metrics = argument.metrics_destinations.value\
+    }\
+  } \/\/ otelcol.connector.servicegraph "default"' /tmp/alloy-config.river
+
+        # Patch ConfigMap
+        CONFIG=$(cat /tmp/alloy-config.river | jq -Rs .)
+        kubectl patch configmap -n monitoring grafana-k8s-monitoring-alloy-singleton --type merge -p "{\"data\":{\"config.alloy\":$CONFIG}}" 2>/dev/null
+        if [ $? -ne 0 ]; then
+          echo "⚠ Warning: Failed to patch ConfigMap, continuing deployment"
+          exit 0
+        fi
+
+        echo "✓ Service graph configuration patched"
+
+        # Restart pod to pick up changes
+        echo "Restarting Alloy singleton pod..."
+        kubectl rollout restart deployment grafana-k8s-monitoring-alloy-singleton -n monitoring 2>/dev/null
+
+        # Wait for pod to be ready
+        if kubectl rollout status deployment/grafana-k8s-monitoring-alloy-singleton -n monitoring --timeout=120s 2>/dev/null; then
+          echo "✓ Alloy singleton pod restarted successfully"
+
+          # Verify pod is healthy
+          sleep 5
+          POD=$(kubectl get pod -n monitoring -l app.kubernetes.io/instance=grafana-k8s-monitoring -l app.kubernetes.io/name=alloy -l alloy.grafana.com/role=singleton -o name | head -1)
+          if [ -n "$POD" ]; then
+            STATUS=$(kubectl get $POD -n monitoring -o jsonpath='{.status.phase}')
+            if [ "$STATUS" = "Running" ]; then
+              echo "✓ Service graph enabled and pod is healthy"
+            else
+              echo "⚠ Warning: Pod status is $STATUS, service graph may not be fully operational"
+            fi
+          fi
+        else
+          echo "⚠ Warning: Pod restart timed out, service graph may be pending"
+        fi
+
+        exit 0  # Don't fail the workflow on service graph errors
+
+    # Step 7: Run your kubectl or deployment commands
     - name: Deploy Nginx & Verify GKE Cluster Connection
       run: |
         kubectl get nodes
@@ -126,7 +201,7 @@ jobs:
 
         echo "Waiting up to 5 minutes for IP address..."
         kubectl wait --namespace default --for=jsonpath='{.status.loadBalancer.ingress[0].ip}' service/nginx-service --timeout=300s
-          
+
         echo "Assigned Public IP:"
         kubectl get svc nginx-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
 
