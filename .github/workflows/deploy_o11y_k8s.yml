@@ -187,11 +187,14 @@ jobs:
           exit 0
         fi
 
-        # Patch ConfigMap
-        CONFIG=$(cat /tmp/alloy-config.river | jq -Rs .)
-        kubectl patch configmap -n monitoring grafana-k8s-monitoring-alloy-singleton --type merge -p "{\"data\":{\"config.alloy\":$CONFIG}}" 2>/dev/null
+        # Apply ConfigMap via server-side apply under field-manager "helm", the
+        # same manager Helm itself uses for this object. A plain `kubectl patch`
+        # registers a separate "kubectl-patch" manager, which then conflicts with
+        # and breaks the next `helm upgrade` of this release. Using the same
+        # manager name avoids that recurring conflict.
+        jq -n --rawfile cfg /tmp/alloy-config.river '{apiVersion:"v1",kind:"ConfigMap",metadata:{name:"grafana-k8s-monitoring-alloy-singleton",namespace:"monitoring"},data:{"config.alloy":$cfg}}' | kubectl apply --server-side --field-manager=helm --force-conflicts -f - 2>/dev/null
         if [ $? -ne 0 ]; then
-          echo "⚠ Warning: Failed to patch ConfigMap, continuing deployment"
+          echo "⚠ Warning: Failed to apply ConfigMap, continuing deployment"
           exit 0
         fi
 
