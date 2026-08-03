@@ -5,10 +5,10 @@ on:
     branches:
       - main # Change this to your preferred branch
   workflow_dispatch: {}
-  schedule:
+  #schedule:
     # 8:00 AM America/New_York (EDT, UTC-4). GitHub Actions cron is always UTC and
     # does not observe DST, so this runs at 7:00 AM ET during EST (winter).
-    - cron: '0 12 * * *'
+   # - cron: '0 12 * * *'
 
 jobs:
   deploy-to-gke:
